@@ -8,6 +8,12 @@
     <title>編程語言模擬器及學習平台 | 互動式代碼編輯與 API 模擬</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&amp;family=Courier+Prime:wght@400;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+    <!-- Monaco Editor CDN -->
+    <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script>
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+    </script>
     <style>
         :root {
             /* 专业IDE配色 - 参考VS Code Dark+ */
@@ -1338,6 +1344,42 @@
             .copyright-section p {
                 font-size: 12px;
             }
+        }
+        
+        /* Monaco Editor 容器樣式 */
+        #freeCodeEditor {
+            width: 100%;
+            height: 600px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        /* 編輯器主題自定義 */
+        .monaco-editor {
+            font-family: 'Fira Code', 'Courier New', monospace !important;
+        }
+        
+        .monaco-editor .line-numbers {
+            color: var(--text-gray) !important;
+        }
+        
+        .monaco-editor .current-line-number {
+            color: var(--primary) !important;
+        }
+        
+        /* 自動補全樣式 */
+        .monaco-editor .suggest-widget {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border) !important;
+        }
+        
+        .monaco-editor .suggest-widget-item {
+            color: var(--text) !important;
+        }
+        
+        .monaco-editor .suggest-widget-item.focused {
+            background-color: var(--active-bg) !important;
         }
     </style>
 </head>
@@ -5530,6 +5572,53 @@ function hello() {
     </div>
 
     <script>
+        // ===== Monaco Editor 初始化 =====
+        let monacoEditor = null;
+        let monacoEditors = {};
+        
+        function initMonacoEditor() {
+            require(['vs/editor/editor.main'], function() {
+                // 初始化自由模式編輯器
+                const freeEditorContainer = document.getElementById('freeCodeEditor');
+                if (freeEditorContainer && !monacoEditor) {
+                    monacoEditor = monaco.editor.create(freeEditorContainer, {
+                        value: '',
+                        language: 'html',
+                        theme: 'vs-dark',
+                        fontSize: 13,
+                        fontFamily: "'Fira Code', 'Courier New', monospace",
+                        lineNumbers: 'on',
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        tabSize: 2,
+                        insertSpaces: true,
+                        wordWrap: 'on',
+                        bracketPairColorization: { enabled: true },
+                        formatOnPaste: true,
+                        formatOnType: true,
+                        autoClosingBrackets: 'always',
+                        autoClosingQuotes: 'always',
+                        autoSurround: 'languageDefined',
+                        suggest: { showKeywords: true, showSnippets: true }
+                    });
+                    
+                    // 監聽編輯器內容變化
+                    monacoEditor.onDidChangeModelContent(() => {
+                        if (state.category === 'frontend' && editorState) {
+                            editorState.code[editorState.currentLang] = monacoEditor.getValue();
+                        }
+                        updateEditorStats();
+                    });
+                }
+            });
+        }
+        
+        // 在 DOM 準備好時初始化 Monaco
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initMonacoEditor, 500);
+        });
+        
         // 全局狀態
         const state = {
             category: null,
@@ -7857,16 +7946,22 @@ int main() {
 
         // 更新編輯器統計信息
         function updateEditorStats() {
-            const editor = document.getElementById('freeCodeEditor');
             const statsEl = document.getElementById('editorStats');
             const statusEl = document.getElementById('editorStatus');
 
             // 安全檢查：確保元素存在
-            if (!editor || !statsEl || !statusEl) {
+            if (!statsEl || !statusEl) {
                 return;
             }
 
-            const code = editor.value || '';
+            // 支持 Monaco Editor 和 textarea
+            let code = '';
+            if (monacoEditor) {
+                code = monacoEditor.getValue();
+            } else {
+                const editor = document.getElementById('freeCodeEditor');
+                if (editor) code = editor.value || '';
+            }
             const lines = code.split('\n').length;
             const chars = code.length;
 
@@ -9155,7 +9250,14 @@ ${jsCode}
                     return;
                 }
 
-                let code = editor.value;
+                // 支持 Monaco Editor 和 textarea
+                let code = '';
+                if (monacoEditor) {
+                    code = monacoEditor.getValue();
+                } else {
+                    const editor = document.getElementById('freeCodeEditor');
+                    if (editor) code = editor.value;
+                }
 
                 // 如果是前端語言且處於獨立模式，需要先保存當前編輯的代碼
                 if (state.category === 'frontend' && !editorState.isMerged && ['html', 'css', 'javascript'].includes(editorState.currentLang)) {
@@ -10258,10 +10360,15 @@ ${jsCode}
 
         // 格式化代碼
         function formatCode() {
-            const editor = document.getElementById('freeCodeEditor');
-            if (!editor) return;
-
-            let code = editor.value;
+            // 支持 Monaco Editor 和 textarea
+            let code = '';
+            if (monacoEditor) {
+                code = monacoEditor.getValue();
+            } else {
+                const editor = document.getElementById('freeCodeEditor');
+                if (!editor) return;
+                code = editor.value;
+            }
             if (!code.trim()) {
                 showNotification('沒有���碼可以格式化', 'error');
                 return;
@@ -10286,7 +10393,13 @@ ${jsCode}
                     code = formatPython(code, indent);
                 }
 
-                editor.value = code;
+                // 支持更新 Monaco Editor 和 textarea
+                if (monacoEditor) {
+                    monacoEditor.setValue(code);
+                } else {
+                    const editor = document.getElementById('freeCodeEditor');
+                    if (editor) editor.value = code;
+                }
 
                 // Update editorState if in frontend mode
                 if (state.category === 'frontend') {
